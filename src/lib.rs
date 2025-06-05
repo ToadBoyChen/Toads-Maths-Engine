@@ -54,30 +54,108 @@ impl Algebra<i32> for IntegerMultiplication {
     }
 }
 
-// Modular arithmetic (mod 7) group
-pub struct Mod7;
 
-impl Algebra<i32> for Mod7 {
-    fn operate_binary(&self, a: i32, b: i32) -> i32 {
-        (a + b) % 7
+#[derive(Debug, Clone, Copy)]
+pub struct ModN {
+    pub n: i32,
+}
+
+impl ModN {
+    pub fn new(n: i32) -> Self {
+        assert!(n == 0, "Modulus must be non-zero");
+        ModN { n }
     }
-    
+}
+
+impl Algebra<i32> for ModN {
+    fn operate_binary(&self, a: i32, b: i32) -> i32 {
+        ((a % self.n + b % self.n) % self.n + self.n) % self.n
+    }
+
     fn operate(&self, elements: &[i32]) -> i32 {
-        if elements.is_empty() {
-            0 // identity for addition mod 7
-        } else {
-            elements.iter().fold(0, |acc, &x| self.operate_binary(acc, x))
+        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+    }
+}
+
+impl Group<i32> for ModN {
+    fn identity(&self) -> i32 {
+        0
+    }
+
+    fn inverse(&self, a: i32) -> i32 {
+        ((self.n - (a % self.n)) % self.n + self.n) % self.n
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Quaternion {
+    pub re: f64,
+    pub i: f64,
+    pub j: f64,
+    pub k: f64,
+}
+
+
+pub struct QuaternionAddition;
+pub struct QuaternionMultiplication;
+
+impl Algebra<Quaternion> for QuaternionMultiplication {
+    fn operate_binary(&self, a: Quaternion, b: Quaternion) -> Quaternion {
+        Quaternion {
+            re: a.re * b.re,
+            i: a.i * b.i,
+            j: a.j * b.j,
+            k: a.k * b.k,
+        }
+    }
+
+    fn operate(&self, elements: &[Quaternion]) -> Quaternion {
+        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+    }
+}
+
+impl Group<Quaternion> for QuaternionMultiplication {
+    fn identity(&self) -> Quaternion {
+        Quaternion { re: 0.0, i: 0.0, j: 0.0, k: 0.0 }
+    }
+
+    fn inverse(&self, a: Quaternion) -> Quaternion {
+        Quaternion {
+            re: -a.re,
+            i: -a.i,
+            j: -a.j,
+            k: -a.k,
         }
     }
 }
 
-impl Group<i32> for Mod7 {
-    fn identity(&self) -> i32 {
-        0
+impl Algebra<Quaternion> for QuaternionAddition {
+    fn operate_binary(&self, a: Quaternion, b: Quaternion) -> Quaternion {
+        Quaternion {
+            re: a.re + b.re,
+            i: a.i + b.i,
+            j: a.j + b.j,
+            k: a.k + b.k,
+        }
     }
-    
-    fn inverse(&self, a: i32) -> i32 {
-        (7 - a) % 7
+
+    fn operate(&self, elements: &[Quaternion]) -> Quaternion {
+        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+    }
+}
+
+impl Group<Quaternion> for QuaternionAddition {
+    fn identity(&self) -> Quaternion {
+        Quaternion { re: 0.0, i: 0.0, j: 0.0, k: 0.0 }
+    }
+
+    fn inverse(&self, a: Quaternion) -> Quaternion {
+        Quaternion {
+            re: -a.re,
+            i: -a.i,
+            j: -a.j,
+            k: -a.k,
+        }
     }
 }
 
