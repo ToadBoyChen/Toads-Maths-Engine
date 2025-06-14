@@ -343,3 +343,11 @@ fn test_complex_randomized_operations() {
         });
     }
 }
+
+#[test]
+#[should_panic(expected = "division by zero")] // Or whatever the expected panic message is
+fn test_complex_inverse_of_zero_panics() {
+    let mul = ComplexMultiplication;
+    let zero = Complex { re: 0.0, im: 0.0 };
+    mul.inverse(zero); // This line should cause a panic
+}

@@ -56,29 +56,36 @@ fn test_euclidean_space_vector_properties() {
 }
 
 #[test]
-fn test_euclidean_space_geometric_properties() {
-    let space = EuclideanSpace::new(2);
 
-    // Test Cauchy-Schwarz inequality: |u·v| ≤ ||u|| ||v||
-    let u = space.vector(&[3.0, 4.0]);
-    let v = space.vector(&[1.0, 2.0]);
-    
-    let dot_product = space.dot(&u, &v);
-    let norm_u = space.norm(&u);
-    let norm_v = space.norm(&v);
-    
-    assert!(dot_product.abs() <= norm_u * norm_v + 1e-10, 
-        "Cauchy-Schwarz inequality should hold: |{}| ≤ {} * {}", dot_product, norm_u, norm_v);
+fn test_euclidean_space_geometric_properties_randomized() {
 
-    // Test parallelogram law: ||u + v||² + ||u - v||² = 2(||u||² + ||v||²)
-    let sum = space.add(&u, &v);
-    let diff = space.add(&u, &space.scalar_mul(&v, -1.0));
-    
-    let left_side = space.norm(&sum).powi(2) + space.norm(&diff).powi(2);
-    let right_side = 2.0 * (space.norm(&u).powi(2) + space.norm(&v).powi(2));
-    
-    assert!((left_side - right_side).abs() < 1e-10, 
-        "Parallelogram law should hold: {} ≈ {}", left_side, right_side);
+    let mut rng = rand::thread_rng();
+    for _ in 0..100 { // Run 100 random trials
+        let dimension = rng.gen_range(2..50);
+        let space = EuclideanSpace::new(dimension);
+        let u_coords: Vec<f64> = (0..dimension).map(|_| rng.gen_range(-100.0..100.0)).collect();
+        let v_coords: Vec<f64> = (0..dimension).map(|_| rng.gen_range(-100.0..100.0)).collect();
+        let u = space.vector(&u_coords);
+        let v = space.vector(&v_coords);
+
+        // Test Cauchy-Schwarz inequality: |u·v| ≤ ||u|| ||v||
+        let dot_product = space.dot(&u, &v);
+        let norm_u = space.norm(&u);
+        let norm_v = space.norm(&v);
+
+        // Add a small epsilon to the right side for floating point stability
+        assert!(dot_product.abs() <= norm_u * norm_v + 1e-9, 
+            "Cauchy-Schwarz inequality failed");
+
+        // Test parallelogram law: ||u + v||² + ||u - v||² = 2(||u||² + ||v||²)
+        let sum_uv = space.add(&u, &v);
+        let diff_uv = space.add(&u, &space.scalar_mul(&v, -1.0));
+
+        let left_side = space.norm(&sum_uv).powi(2) + space.norm(&diff_uv).powi(2);
+        let right_side = 2.0 * (space.norm(&u).powi(2) + space.norm(&v).powi(2));
+        assert!((left_side - right_side).abs() < 1e-9, 
+            "Parallelogram law failed");
+    }
 }
 
 // ========== ELEMENT-WISE VECTOR OPERATIONS TESTS ==========

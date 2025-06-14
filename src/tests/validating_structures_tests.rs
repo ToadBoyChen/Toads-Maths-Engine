@@ -79,23 +79,35 @@ fn test_element_wise_distributivity() {
     let add = NMatrixAddition::zero();
     let mul = NMatrixMultiplication::zero();
 
-    let a = NMatrixAddition { elements: vec![2.0, 3.0] };
-    let b = NMatrixAddition { elements: vec![4.0, 5.0] };
+    // Using multiplication types from the start for easier conversion
+    let a = NMatrixMultiplication { elements: vec![2.0, 3.0] };
+    let b = NMatrixMultiplication { elements: vec![4.0, 5.0] };
     let c = NMatrixMultiplication { elements: vec![6.0, 7.0] };
 
-    // Test distributivity: c * (a + b) = c * a + c * b
-    // Note: We need to convert between addition and multiplication types for this test
-    let sum_ab = add.operate_binary(a.clone(), b.clone());
-    let sum_as_mul = NMatrixMultiplication { elements: sum_ab.elements };
+    // Left side: c * (a + b)
+    // To calculate a + b, we need to convert them to the addition type
+    let a_add = NMatrixAddition { elements: a.elements.clone() };
+    let b_add = NMatrixAddition { elements: b.elements.clone() };
+    let sum_ab = add.operate_binary(a_add, b_add);
     
-    let left_side = mul.operate_binary(c.clone(), sum_as_mul);
+    // Now perform the multiplication
+    let left_side = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: sum_ab.elements });
+
+    // Right side: (c * a) + (c * b)
+    let ca = mul.operate_binary(c.clone(), a.clone());
+    let cb = mul.operate_binary(c.clone(), b.clone());
     
-    let ca = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: a.elements });
-    let cb = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: b.elements });
-    let right_side_mul = mul.operate_binary(ca, cb);
+    // Convert results to addition type to perform the final sum
+    let ca_add = NMatrixAddition { elements: ca.elements };
+    let cb_add = NMatrixAddition { elements: cb.elements };
+    let right_side = add.operate_binary(ca_add, cb_add);
+
+    // Now the types match and the logic is correct
+    assert_eq!(left_side.elements, right_side.elements);
     
-    // This won't work directly due to type mismatch, but conceptually tests distributivity
-    assert_eq!(left_side.elements, vec![36.0, 56.0]); // 6*(2+4), 7*(3+5)
+    // You can also assert the concrete value
+    assert_eq!(left_side.elements, vec![36.0, 56.0]); // c*(a+b) = [6*(2+4), 7*(3+5)]
+    assert_eq!(right_side.elements, vec![36.0, 56.0]);// c*a+c*b = [6*2+6*4, 7*3+7*5]
 }
 
 #[test]
