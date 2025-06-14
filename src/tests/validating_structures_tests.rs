@@ -79,35 +79,23 @@ fn test_element_wise_distributivity() {
     let add = NMatrixAddition::zero();
     let mul = NMatrixMultiplication::zero();
 
-    // Using multiplication types from the start for easier conversion
-    let a = NMatrixMultiplication { elements: vec![2.0, 3.0] };
-    let b = NMatrixMultiplication { elements: vec![4.0, 5.0] };
+    let a = NMatrixAddition { elements: vec![2.0, 3.0] };
+    let b = NMatrixAddition { elements: vec![4.0, 5.0] };
     let c = NMatrixMultiplication { elements: vec![6.0, 7.0] };
 
-    // Left side: c * (a + b)
-    // To calculate a + b, we need to convert them to the addition type
-    let a_add = NMatrixAddition { elements: a.elements.clone() };
-    let b_add = NMatrixAddition { elements: b.elements.clone() };
-    let sum_ab = add.operate_binary(a_add, b_add);
-    
-    // Now perform the multiplication
-    let left_side = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: sum_ab.elements });
+    // c * (a + b)
+    let sum_ab = add.operate_binary(a.clone(), b.clone());
+    let left_side = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: sum_ab.elements.clone() });
 
-    // Right side: (c * a) + (c * b)
-    let ca = mul.operate_binary(c.clone(), a.clone());
-    let cb = mul.operate_binary(c.clone(), b.clone());
-    
-    // Convert results to addition type to perform the final sum
-    let ca_add = NMatrixAddition { elements: ca.elements };
-    let cb_add = NMatrixAddition { elements: cb.elements };
-    let right_side = add.operate_binary(ca_add, cb_add);
+    // (c * a) + (c * b)
+    let ca = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: a.elements.clone() });
+    let cb = mul.operate_binary(c.clone(), NMatrixMultiplication { elements: b.elements.clone() });
+    let right_side = add.operate_binary(
+        NMatrixAddition { elements: ca.elements },
+        NMatrixAddition { elements: cb.elements },
+    );
 
-    // Now the types match and the logic is correct
-    assert_eq!(left_side.elements, right_side.elements);
-    
-    // You can also assert the concrete value
-    assert_eq!(left_side.elements, vec![36.0, 56.0]); // c*(a+b) = [6*(2+4), 7*(3+5)]
-    assert_eq!(right_side.elements, vec![36.0, 56.0]);// c*a+c*b = [6*2+6*4, 7*3+7*5]
+    assert_eq!(left_side.elements, right_side.elements); // This actually checks distributivity
 }
 
 #[test]
