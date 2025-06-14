@@ -1,16 +1,10 @@
-// Trait for a general algebraic structure with a binary operation
-pub trait Algebra<T> {
-    fn operate_binary(&self, a: T, b: T) -> T;
-    fn operate(&self, elements: &[T]) -> T;
-}
+// mod libs {
+//     include!("../lib/algebras.rs");
+// }
 
-// Trait for a group, which extends Algebra
-pub trait Group<T>: Algebra<T> {
-    fn identity(&self) -> T;
-    fn inverse(&self, a: T) -> T;
-}
+// use crate::libs::*;
 
-// Concrete implementation: Integer addition group
+// Integer addition group
 pub struct IntegerAddition;
 
 impl Algebra<i32> for IntegerAddition {
@@ -58,33 +52,6 @@ impl Algebra<i32> for IntegerMultiplication {
 #[derive(Debug, Clone, Copy)]
 pub struct ModN {
     pub n: i32,
-}
-
-impl ModN {
-    pub fn new(n: i32) -> Self {
-        assert!(n > 0, "Modulus must be positive and non-zero");
-        ModN { n }
-    }
-}
-
-impl Algebra<i32> for ModN {
-    fn operate_binary(&self, a: i32, b: i32) -> i32 {
-        ((a % self.n + b % self.n) % self.n + self.n) % self.n
-    }
-
-    fn operate(&self, elements: &[i32]) -> i32 {
-        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
-    }
-}
-
-impl Group<i32> for ModN {
-    fn identity(&self) -> i32 {
-        0
-    }
-
-    fn inverse(&self, a: i32) -> i32 {
-        ((self.n - (a % self.n)) % self.n + self.n) % self.n
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -205,40 +172,80 @@ impl Group<Complex> for ComplexAddition {
     }
 }
 
-// 2x2 Matrix structure
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Matrix2x2(pub [[i32; 2]; 2]);
+// N-dimensional matrix addition group
+#[derive(Clone, Debug)]
+pub struct NMatrixAddition {
+    pub elements: Vec<f64>,
+}
 
-// Matrix addition group
-pub struct MatrixAddition;
-
-impl Algebra<Matrix2x2> for MatrixAddition {
-    fn operate_binary(&self, a: Matrix2x2, b: Matrix2x2) -> Matrix2x2 {
-        Matrix2x2([
-            [a.0[0][0] + b.0[0][0], a.0[0][1] + b.0[0][1]],
-            [a.0[1][0] + b.0[1][0], a.0[1][1] + b.0[1][1]],
-        ])
+impl NMatrixAddition {
+    pub fn zero() -> Self {
+        NMatrixAddition { elements: vec![0.0; 2] }
     }
-    
-    fn operate(&self, elements: &[Matrix2x2]) -> Matrix2x2 {
+}
+
+impl Algebra<NMatrixAddition> for NMatrixAddition {
+    fn operate_binary(&self, a: NMatrixAddition, b: NMatrixAddition) -> NMatrixAddition {
+        NMatrixAddition {
+            elements: a.elements.iter().zip(b.elements.iter()).map(|(x, y)| x + y).collect(),
+        }
+    }
+
+    fn operate(&self, elements: &[NMatrixAddition]) -> NMatrixAddition {
         if elements.is_empty() {
-            Matrix2x2([[0, 0], [0, 0]]) // zero matrix
+            NMatrixAddition::zero()
         } else {
-            elements.iter().fold(Matrix2x2([[0, 0], [0, 0]]), |acc, &x| self.operate_binary(acc, x))
+            elements.iter().fold(NMatrixAddition::zero(), |acc, x| self.operate_binary(acc, (*x).clone()))
+        }
+    }
+}
+impl Group<NMatrixAddition> for NMatrixAddition {
+    fn identity(&self) -> NMatrixAddition {
+        NMatrixAddition::zero()
+    }
+    fn inverse(&self, a: NMatrixAddition) -> NMatrixAddition {
+        NMatrixAddition {
+            elements: a.elements.iter().map(|&x| -x).collect(),
         }
     }
 }
 
-impl Group<Matrix2x2> for MatrixAddition {
-    fn identity(&self) -> Matrix2x2 {
-        Matrix2x2([[0, 0], [0, 0]])
+// N-dimensional matrix multiplication group
+#[derive(Clone, Debug)]
+pub struct NMatrixMultiplication {
+    pub elements: Vec<f64>,
+}
+
+impl Algebra<NMatrixMultiplication> for NMatrixMultiplication {
+    fn operate_binary(&self, a: NMatrixMultiplication, b: NMatrixMultiplication) -> NMatrixMultiplication {
+        NMatrixMultiplication {
+            elements: a.elements.iter().zip(b.elements.iter()).map(|(x, y)| x * y).collect(),
+        }
     }
-    
-    fn inverse(&self, a: Matrix2x2) -> Matrix2x2 {
-        Matrix2x2([
-            [-a.0[0][0], -a.0[0][1]],
-            [-a.0[1][0], -a.0[1][1]],
-        ])
+
+    fn operate(&self, elements: &[NMatrixMultiplication]) -> NMatrixMultiplication {
+        if elements.is_empty() {
+            NMatrixMultiplication::zero()
+        } else {
+            elements.iter().fold(NMatrixMultiplication::zero(), |acc, x| self.operate_binary(acc, (*x).clone()))
+        }
+    }
+}
+
+impl NMatrixMultiplication {
+    pub fn zero() -> Self {
+        NMatrixMultiplication { elements: vec![1.0; 2] } // Identity for multiplication
+    }
+}
+
+impl Group<NMatrixMultiplication> for NMatrixMultiplication {
+    fn identity(&self) -> NMatrixMultiplication {
+        NMatrixMultiplication::zero()
+    }
+    fn inverse(&self, a: NMatrixMultiplication) -> NMatrixMultiplication {
+        NMatrixMultiplication {
+            elements: a.elements.iter().map(|&x| if x != 0.0 { 1.0 / x } else { 0.0 }).collect(),
+        }
     }
 }
 
@@ -359,5 +366,153 @@ impl PartialEq for Quaternion {
         (self.i - other.i).abs() < 1e-6 &&
         (self.j - other.j).abs() < 1e-6 &&
         (self.k - other.k).abs() < 1e-6
+    }
+}
+
+#[allow(unused)]
+pub struct EuclideanSpace;
+
+impl EuclideanSpace {
+    #[allow(unused)]
+    pub fn new(dimensions: usize) -> Self {
+        EuclideanSpace
+    }
+
+    #[allow(unused)]
+    pub fn vector(&self, components: &[f64]) -> Vec<f64> {
+        components.to_vec()
+    }
+
+    #[allow(unused)]
+    pub fn dot(&self, v1: &[f64], v2: &[f64]) -> f64 {
+        v1.iter().zip(v2.iter()).map(|(x, y)| x * y).sum()
+    }
+
+    #[allow(unused)]
+    pub fn norm(&self, v: &[f64]) -> f64 {
+        self.dot(v, v).sqrt()
+    }
+
+    #[allow(unused)]
+    pub fn add(&self, v1: &[f64], v2: &[f64]) -> Vec<f64> {
+        v1.iter().zip(v2.iter()).map(|(x, y)| x + y).collect()
+    }
+
+    #[allow(unused)]
+    pub fn scalar_mul(&self, v: &[f64], scalar: f64) -> Vec<f64> {
+        v.iter().map(|x| x * scalar).collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Octonion {
+    pub re: f64,
+    pub i: f64,
+    pub j: f64,
+    pub k: f64,
+    pub l: f64,
+    pub m: f64,
+    pub n: f64,
+    pub o: f64,
+}
+
+pub struct OctonionAddition;
+pub struct OctonionMultiplication;
+
+impl Algebra<Octonion> for OctonionAddition {
+    fn operate_binary(&self, a: Octonion, b: Octonion) -> Octonion {
+        Octonion {
+            re: a.re + b.re,
+            i: a.i + b.i,
+            j: a.j + b.j,
+            k: a.k + b.k,
+            l: a.l + b.l,
+            m: a.m + b.m,
+            n: a.n + b.n,
+            o: a.o + b.o,
+        }
+    }
+
+    fn operate(&self, elements: &[Octonion]) -> Octonion {
+        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+    }
+}
+
+impl Group<Octonion> for OctonionAddition {
+    fn identity(&self) -> Octonion {
+        Octonion {
+            re: 0.0,
+            i: 0.0,
+            j: 0.0,
+            k: 0.0,
+            l: 0.0,
+            m: 0.0,
+            n: 0.0,
+            o: 0.0,
+        }
+    }
+
+    fn inverse(&self, a: Octonion) -> Octonion {
+        Octonion {
+            re: -a.re,
+            i: -a.i,
+            j: -a.j,
+            k: -a.k,
+            l: -a.l,
+            m: -a.m,
+            n: -a.n,
+            o: -a.o,
+        }
+    }
+}
+
+impl Algebra<Octonion> for OctonionMultiplication {
+    fn operate_binary(&self, a: Octonion, b: Octonion) -> Octonion {
+        Octonion {
+            re: a.re * b.re - a.i * b.i - a.j * b.j - a.k * b.k - a.l * b.l - a.m * b.m - a.n * b.n - a.o * b.o,
+            i: a.re * b.i + a.i * b.re,
+            j: a.re * b.j + a.j * b.re,
+            k: a.re * b.k + a.k * b.re,
+            l: a.re * b.l + a.l * b.re,
+            m: a.re * b.m + a.m * b.re,
+            n: a.re * b.n + a.n * b.re,
+            o: a.re * b.o + a.o * b.re,
+        }
+    }
+
+    fn operate(&self, elements: &[Octonion]) -> Octonion {
+        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+    }
+}
+
+impl Group<Octonion> for OctonionMultiplication {
+    fn identity(&self) -> Octonion {
+        Octonion {
+            re: 1.0,
+            i: 0.0,
+            j: 0.0,
+            k: 0.0,
+            l: 0.0,
+            m: 0.0,
+            n: 0.0,
+            o: 0.0,
+        }
+    }
+
+    fn inverse(&self, a: Octonion) -> Octonion {
+        let norm_squared = a.re * a.re + a.i * a.i + a.j * a.j + a.k * a.k + a.l * a.l + a.m * a.m + a.n * a.n + a.o * a.o;
+        if norm_squared == 0.0 {
+            panic!("Cannot invert a zero octonion");
+        }
+        Octonion {
+            re: a.re / norm_squared,
+            i: -a.i / norm_squared,
+            j: -a.j / norm_squared,
+            k: -a.k / norm_squared,
+            l: -a.l / norm_squared,
+            m: -a.m / norm_squared,
+            n: -a.n / norm_squared,
+            o: -a.o / norm_squared,
+        }
     }
 }

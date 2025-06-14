@@ -1,4 +1,17 @@
-use docker_rust_bin::*;
+#[cfg(test)]
+mod tests {
+    include!("tests/linear_algebra_tests.rs");
+    include!("tests/number_system_tests.rs");
+    include!("tests/validating_structures_tests.rs");
+    include!("tests/new_structures_tests.rs");
+}
+
+mod libs {
+    include!("lib/algebras.rs");
+    include!("lib/specialised_algebras.rs");
+}
+
+use crate::libs::*;
 
 fn main() {
     let group = IntegerAddition;
