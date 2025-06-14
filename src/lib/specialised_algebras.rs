@@ -173,7 +173,7 @@ impl Group<Complex> for ComplexAddition {
 }
 
 // N-dimensional matrix addition group
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NMatrixAddition {
     pub elements: Vec<f64>,
 }
@@ -211,7 +211,7 @@ impl Group<NMatrixAddition> for NMatrixAddition {
 }
 
 // N-dimensional matrix multiplication group
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NMatrixMultiplication {
     pub elements: Vec<f64>,
 }

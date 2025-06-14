@@ -301,7 +301,7 @@ fn test_complex_field_laws() {
 }
 
 #[test]
-fn test_new_structures() {
+fn test_octonion_structures() {
     let mut rng = rand::thread_rng();
 
     // Test Octonion Addition
@@ -364,4 +364,45 @@ fn test_new_structures() {
 
     let quaternion_product = quaternion_mul.operate_binary(q1, q2);
     assert_ne!(quaternion_product, quaternion_mul.operate_binary(q2, q1), "Quaternion multiplication is unexpectedly commutative");
+}
+
+#[test]
+fn test_non_commutativity_quaternions() {
+    let mul = QuaternionMultiplication;
+    let mut rng = rand::thread_rng();
+
+    let a = Quaternion {
+        re: rng.gen_range(-100.0..100.0),
+        i: rng.gen_range(-100.0..100.0),
+        j: rng.gen_range(-100.0..100.0),
+        k: rng.gen_range(-100.0..100.0),
+    };
+    let b = Quaternion {
+        re: rng.gen_range(-100.0..100.0),
+        i: rng.gen_range(-100.0..100.0),
+        j: rng.gen_range(-100.0..100.0),
+        k: rng.gen_range(-100.0..100.0),
+    };
+
+    let ab = mul.operate_binary(a, b);
+    let ba = mul.operate_binary(b, a);
+
+    assert_ne!(ab, ba, "Quaternion multiplication is unexpectedly commutative");
+}
+
+#[test]
+#[should_panic(expected = "Cannot invert a zero quaternion")]
+fn test_zero_quaternion_inverse() {
+    let mul = QuaternionMultiplication;
+
+    // Define the zero quaternion
+    let zero_quaternion = Quaternion {
+        re: 0.0,
+        i: 0.0,
+        j: 0.0,
+        k: 0.0,
+    };
+
+    // Attempt to compute the inverse, which should panic
+    mul.inverse(zero_quaternion);
 }
