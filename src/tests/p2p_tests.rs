@@ -1,5 +1,3 @@
-use docker_rust_bin::*;
-
 #[test]
 fn test_modn_ideal() {
     let ideal = [0]; // the trivial ideal {0}

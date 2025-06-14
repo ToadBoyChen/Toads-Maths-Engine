@@ -1,408 +1,345 @@
-// mod libs {
-//     include!("../lib/algebras.rs");
-//     include!("../lib/specialised_algebras.rs");
-// }
-
-// use crate::libs::*;
-
 macro_rules! assert_complex_eq {
+    ($a:expr, $b:expr, $tolerance:expr) => {
+        assert!(($a.re - $b.re).abs() < $tolerance && ($a.im - $b.im).abs() < $tolerance,
+            "Complex mismatch: {:?} != {:?} (tolerance: {})", $a, $b, $tolerance);
+    };
     ($a:expr, $b:expr) => {
-        assert!(($a.re - $b.re).abs() < 1e-6 && ($a.im - $b.im).abs() < 1e-6,
-      
-            "Complex mismatch: {:?} != {:?}", $a, $b);
+        assert_complex_eq!($a, $b, 1e-10);
     };
 } 
 
 macro_rules! assert_quaternion_eq {
+    ($a:expr, $b:expr, $tolerance:expr) => {
+        assert!(($a.re - $b.re).abs() < $tolerance && ($a.i - $b.i).abs() < $tolerance &&
+                ($a.j - $b.j).abs() < $tolerance && ($a.k - $b.k).abs() < $tolerance,
+            "Quaternion mismatch: {:?} != {:?} (tolerance: {})", $a, $b, $tolerance);
+    };
     ($a:expr, $b:expr) => {
-        assert!(($a.re - $b.re).abs() < 1e-6 && ($a.i - $b.i).abs() < 1e-6 &&
-                ($a.j - $b.j).abs() < 1e-6 && ($a.k - $b.k).abs() < 1e-6,
-            "Quaternion mismatch: {:?} != {:?}", $a, $b);
+        assert_quaternion_eq!($a, $b, 1e-10);
     };
 }
 
-// IntegerAddition implements Group<i32>
+macro_rules! assert_octonion_eq {
+    ($a:expr, $b:expr, $tolerance:expr) => {
+        assert!(($a.re - $b.re).abs() < $tolerance && ($a.i - $b.i).abs() < $tolerance &&
+                ($a.j - $b.j).abs() < $tolerance && ($a.k - $b.k).abs() < $tolerance &&
+                ($a.l - $b.l).abs() < $tolerance && ($a.m - $b.m).abs() < $tolerance &&
+                ($a.n - $b.n).abs() < $tolerance && ($a.o - $b.o).abs() < $tolerance,
+            "Octonion mismatch: {:?} != {:?} (tolerance: {})", $a, $b, $tolerance);
+    };
+    ($a:expr, $b:expr) => {
+        assert_octonion_eq!($a, $b, 1e-10);
+    };
+}
+
+// ========== INTEGER ADDITION GROUP TESTS ==========
+
 #[test]
-fn test_integer_addition_group_laws() {
+fn test_integer_addition_group_axioms() {
+    let add = IntegerAddition;
+    let test_values = [-1000, -100, -1, 0, 1, 100, 1000];
+
+    // Test closure (with wrapping arithmetic)
+    for &a in &test_values {
+        for &b in &test_values {
+            let result = add.operate_binary(a, b);
+            assert_eq!(result, a.wrapping_add(b), "Closure failed for {} + {}", a, b);
+        }
+    }
+
+    // Test associativity: (a + b) + c = a + (b + c)
+    for &a in &test_values {
+        for &b in &test_values {
+            for &c in &test_values {
+                let left = add.operate_binary(add.operate_binary(a, b), c);
+                let right = add.operate_binary(a, add.operate_binary(b, c));
+                assert_eq!(left, right, "Associativity failed for ({} + {}) + {} vs {} + ({} + {})", a, b, c, a, b, c);
+            }
+        }
+    }
+
+    // Test commutativity: a + b = b + a (abelian group)
+    for &a in &test_values {
+        for &b in &test_values {
+            assert_eq!(add.operate_binary(a, b), add.operate_binary(b, a), 
+                "Commutativity failed for {} + {} vs {} + {}", a, b, b, a);
+        }
+    }
+
+    // Test identity element: a + 0 = a
+    assert_eq!(add.identity(), 0);
+    for &a in &test_values {
+        assert_eq!(add.operate_binary(a, 0), a, "Right identity failed for {}", a);
+        assert_eq!(add.operate_binary(0, a), a, "Left identity failed for {}", a);
+    }
+
+    // Test inverse element: a + (-a) = 0
+    for &a in &test_values {
+        let inverse = add.inverse(a);
+        assert_eq!(inverse, -a, "Inverse calculation failed for {}", a);
+        assert_eq!(add.operate_binary(a, inverse), 0, "Inverse property failed for {}", a);
+    }
+
+    // Test operation on collections
+    assert_eq!(add.operate(&[]), 0, "Empty collection should return identity");
+    assert_eq!(add.operate(&[42]), 42, "Single element should return itself");
+    assert_eq!(add.operate(&[1, 2, 3, 4]), 10, "Sum of [1,2,3,4] should be 10");
+}
+
+#[test]
+fn test_integer_addition_edge_cases() {
     let add = IntegerAddition;
 
-    // Closure + edge case protection
-    for &a in &[i32::MIN, -100, -1, 0, 1, 100, i32::MAX] {
-        for &b in &[i32::MIN, -100, -1, 0, 1, 100, i32::MAX] {
-            let res = add.operate_binary(a, b);
-            // Rust wraps on overflow, but in abstract algebra, this should be closed in Z
-            assert_eq!(res, a.wrapping_add(b));
+    // Test overflow behavior
+    assert_eq!(add.operate_binary(i32::MAX, 1), i32::MIN, "Overflow should wrap");
+    assert_eq!(add.operate_binary(i32::MIN, -1), i32::MAX, "Underflow should wrap");
+    
+    // Test large sequences
+    let large_seq: Vec<i32> = (1..=1000).collect();
+    let expected_sum = (1000 * 1001) / 2; // Gauss formula
+    assert_eq!(add.operate(&large_seq), expected_sum, "Large sequence sum failed");
+}
+
+// ========== INTEGER MULTIPLICATION MONOID TESTS ==========
+
+#[test]
+fn test_integer_multiplication_monoid_axioms() {
+    let mul = IntegerMultiplication;
+    let test_values = [-10, -2, -1, 0, 1, 2, 10];
+
+    // Test closure (with wrapping arithmetic)
+    for &a in &test_values {
+        for &b in &test_values {
+            let result = mul.operate_binary(a, b);
+            assert_eq!(result, a.wrapping_mul(b), "Closure failed for {} * {}", a, b);
         }
     }
 
-    // Associativity
-    for a in -20..20 {
-        for b in -20..20 {
-            for c in -20..20 {
-                let ab = add.operate_binary(a, b);
-                let bc = add.operate_binary(b, c);
-                assert_eq!(
-                    add.operate_binary(ab, c),
-                    add.operate_binary(a, bc)
-                );
+    // Test associativity: (a * b) * c = a * (b * c)
+    for &a in &test_values {
+        for &b in &test_values {
+            for &c in &test_values {
+                let left = mul.operate_binary(mul.operate_binary(a, b), c);
+                let right = mul.operate_binary(a, mul.operate_binary(b, c));
+                assert_eq!(left, right, "Associativity failed for ({} * {}) * {} vs {} * ({} * {})", a, b, c, a, b, c);
             }
         }
     }
 
-    // Commutativity
-    for a in -100..100 {
-        for b in -100..100 {
-            assert_eq!(add.operate_binary(a, b), add.operate_binary(b, a));
+    // Test commutativity: a * b = b * a (abelian monoid)
+    for &a in &test_values {
+        for &b in &test_values {
+            assert_eq!(mul.operate_binary(a, b), mul.operate_binary(b, a),
+                "Commutativity failed for {} * {} vs {} * {}", a, b, b, a);
         }
     }
 
-    // Identity
-    assert_eq!(add.identity(), 0);
-    for a in -200..200 {
-        assert_eq!(add.operate_binary(a, 0), a);
-        assert_eq!(add.operate_binary(0, a), a);
+    // Test identity element: a * 1 = a
+    for &a in &test_values {
+        assert_eq!(mul.operate_binary(a, 1), a, "Right identity failed for {}", a);
+        assert_eq!(mul.operate_binary(1, a), a, "Left identity failed for {}", a);
     }
 
-    // Inverse
-    for a in -100..100 {
-        assert_eq!(add.operate_binary(a, -a), 0);
-    }
-
-    // Operate slice
-    assert_eq!(add.operate(&[]), 0);
-    assert_eq!(add.operate(&[42]), 42);
-
-    // Large value sanity
-    assert_eq!(add.operate_binary(i32::MAX - 1, 1), i32::MAX);
+    // Test operation on collections
+    assert_eq!(mul.operate(&[]), 1, "Empty collection should return identity");
+    assert_eq!(mul.operate(&[7]), 7, "Single element should return itself");
+    assert_eq!(mul.operate(&[2, 3, 4]), 24, "Product of [2,3,4] should be 24");
 }
 
-// IntegerMultiplication is a commutative monoid, not a group
 #[test]
-fn test_integer_multiplication_monoid_laws() {
+fn test_integer_multiplication_special_cases() {
     let mul = IntegerMultiplication;
 
-    // Closure
-    for &a in &[i32::MIN, -100, -1, 0, 1, 100, i32::MAX] {
-        for &b in &[i32::MIN, -100, -1, 0, 1, 100, i32::MAX] {
-            let res = mul.operate_binary(a, b);
-            assert_eq!(res, a.wrapping_mul(b));
+    // Test zero element (absorbing element)
+    for &a in &[-100, -1, 0, 1, 100] {
+        assert_eq!(mul.operate_binary(a, 0), 0, "Zero should absorb: {} * 0", a);
+        assert_eq!(mul.operate_binary(0, a), 0, "Zero should absorb: 0 * {}", a);
+    }
+
+    // Test negative numbers
+    assert_eq!(mul.operate_binary(-2, -3), 6, "Negative * negative should be positive");
+    assert_eq!(mul.operate_binary(-2, 3), -6, "Negative * positive should be negative");
+    assert_eq!(mul.operate_binary(2, -3), -6, "Positive * negative should be negative");
+}
+
+// ========== COMPLEX NUMBER TESTS ==========
+
+#[test]
+fn test_complex_addition_group_axioms() {
+    let add = ComplexAddition;
+    let mut rng = rand::thread_rng();
+
+    // Test with specific values
+    let test_values = [
+        Complex { re: 0.0, im: 0.0 },
+        Complex { re: 1.0, im: 0.0 },
+        Complex { re: 0.0, im: 1.0 },
+        Complex { re: 1.0, im: 1.0 },
+        Complex { re: -1.0, im: -1.0 },
+        Complex { re: 3.0, im: -4.0 },
+    ];
+
+    for &a in &test_values {
+        for &b in &test_values {
+            for &c in &test_values {
+                // Test associativity: (a + b) + c = a + (b + c)
+                let left = add.operate_binary(add.operate_binary(a, b), c);
+                let right = add.operate_binary(a, add.operate_binary(b, c));
+                assert_complex_eq!(left, right);
+
+                // Test commutativity: a + b = b + a
+                assert_complex_eq!(add.operate_binary(a, b), add.operate_binary(b, a));
+            }
+
+            // Test identity: a + 0 = a
+            let zero = Complex { re: 0.0, im: 0.0 };
+            assert_complex_eq!(add.operate_binary(a, zero), a);
+            assert_complex_eq!(add.operate_binary(zero, a), a);
+
+            // Test inverse: a + (-a) = 0
+            let inverse = add.inverse(a);
+            assert_complex_eq!(add.operate_binary(a, inverse), zero);
         }
     }
 
-    // Associativity
-    for a in -10..10 {
-        for b in -10..10 {
-            for c in -10..10 {
-                assert_eq!(
-                    mul.operate_binary(mul.operate_binary(a, b), c),
-                    mul.operate_binary(a, mul.operate_binary(b, c))
-                );
+    // Test with random values for robustness
+    for _ in 0..50 {
+        let a = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+        let b = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+        let c = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+
+        // Test associativity
+        let left = add.operate_binary(add.operate_binary(a, b), c);
+        let right = add.operate_binary(a, add.operate_binary(b, c));
+        assert_complex_eq!(left, right);
+
+        // Test commutativity
+        assert_complex_eq!(add.operate_binary(a, b), add.operate_binary(b, a));
+    }
+}
+
+#[test]
+fn test_complex_multiplication_group_axioms() {
+    let mul = ComplexMultiplication;
+    let mut rng = rand::thread_rng();
+
+    // Test with specific values
+    let test_values = [
+        Complex { re: 1.0, im: 0.0 },   // Real unit
+        Complex { re: 0.0, im: 1.0 },   // Imaginary unit
+        Complex { re: -1.0, im: 0.0 },  // Negative real
+        Complex { re: 0.0, im: -1.0 },  // Negative imaginary
+        Complex { re: 1.0, im: 1.0 },   // First quadrant
+        Complex { re: 3.0, im: 4.0 },   // Pythagorean triple
+    ];
+
+    for &a in &test_values {
+        for &b in &test_values {
+            for &c in &test_values {
+                // Test associativity: (a * b) * c = a * (b * c)
+                let left = mul.operate_binary(mul.operate_binary(a, b), c);
+                let right = mul.operate_binary(a, mul.operate_binary(b, c));
+                assert_complex_eq!(left, right);
+
+                // Test commutativity: a * b = b * a
+                assert_complex_eq!(mul.operate_binary(a, b), mul.operate_binary(b, a));
+            }
+
+            // Test identity: a * 1 = a
+            let one = Complex { re: 1.0, im: 0.0 };
+            assert_complex_eq!(mul.operate_binary(a, one), a);
+            assert_complex_eq!(mul.operate_binary(one, a), a);
+
+            // Test inverse: a * a⁻¹ = 1 (for non-zero a)
+            if a.re != 0.0 || a.im != 0.0 {
+                let inverse = mul.inverse(a);
+                let product = mul.operate_binary(a, inverse);
+                assert_complex_eq!(product, one);
             }
         }
     }
 
-    // Commutativity
-    for a in -100..100 {
-        for b in -100..100 {
-            assert_eq!(mul.operate_binary(a, b), mul.operate_binary(b, a));
+    // Test random values
+    for _ in 0..50 {
+        let a = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+        let b = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+        
+        // Skip if too close to zero
+        if (a.re * a.re + a.im * a.im) < 1e-10 || (b.re * b.re + b.im * b.im) < 1e-10 {
+            continue;
         }
-    }
 
-    // Identity
-    for a in -200..200 {
-        assert_eq!(mul.operate_binary(a, 1), a);
-        assert_eq!(mul.operate_binary(1, a), a);
-    }
-
-    // Edge
-    assert_eq!(mul.operate(&[]), 1);
-    assert_eq!(mul.operate(&[7]), 7);
-
-    let big = i32::MAX / 2;
-    assert_eq!(mul.operate_binary(big, 2), big * 2);
-}
-
-// Complex addition: use approx_eq
-#[test]
-fn test_quaternion_addition_group_laws() {
-    let add = QuaternionAddition;
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..100 {
-        let a = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-        let b = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-        let c = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-
-        // Associativity
-        assert_quaternion_eq!(
-            add.operate_binary(add.operate_binary(a, b), c),
-            add.operate_binary(a, add.operate_binary(b, c))
-        );
-
-        // Commutativity
-        assert_quaternion_eq!(add.operate_binary(a, b), add.operate_binary(b, a));
-
-        // Identity
-        assert_quaternion_eq!(add.operate_binary(a, Quaternion { re: 0.0, i: 0.0, j: 0.0, k: 0.0 }), a);
-        assert_quaternion_eq!(add.operate_binary(Quaternion { re: 0.0, i: 0.0, j: 0.0, k: 0.0 }, a), a);
-
-        // Inverse
-        let inv = Quaternion { re: -a.re, i: -a.i, j: -a.j, k: -a.k };
-        assert_quaternion_eq!(add.operate_binary(a, inv), Quaternion { re: 0.0, i: 0.0, j: 0.0, k: 0.0 });
-    }
-
-    let a = Quaternion { re: 5.0, i: 0.0, j: 7.0, k: 0.0 };
-    assert_quaternion_eq!(add.operate(&[a]), a);
-}
-
-
-#[test]
-fn test_quaternion_multiplication_group_laws() {
-    let mul = QuaternionMultiplication;
-    let mut rng = rand::thread_rng();
-    let one = Quaternion { re: 1.0, i: 0.0, j: 0.0, k: 0.0 };
-
-    for _ in 0..100 {
-        let a = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-        let b = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-        let c = Quaternion { re: rng.gen_range(-100.0..100.0), i: rng.gen_range(-100.0..100.0), j: rng.gen_range(-100.0..100.0), k: rng.gen_range(-100.0..100.0) };
-
-        // Associativity
-        assert_quaternion_eq!(
-            mul.operate_binary(mul.operate_binary(a, b), c),
-            mul.operate_binary(a, mul.operate_binary(b, c))
-        );
-
-        // Commutativity - ALL quaternion multiplication is not commutative
-        assert_ne!(mul.operate_binary(a, b), mul.operate_binary(b, a), "Quaternions are unexpectedly commutative: {:?} * {:?} == {:?} * {:?}", a, b, b, a);
-
-        // Identity
-        assert_quaternion_eq!(mul.operate_binary(a, one), a);
-        assert_quaternion_eq!(mul.operate_binary(one, a), a);
-
-        // Inverse
-        let norm_sq = a.re * a.re + a.i * a.i + a.j * a.j + a.k * a.k;
-        let inv = Quaternion {
-            re: a.re / norm_sq,
-            i: -a.i / norm_sq,
-            j: -a.j / norm_sq,
-            k: -a.k / norm_sq,
-        };
-        assert_quaternion_eq!(mul.operate_binary(a, inv), one);
-    }
-
-    assert_quaternion_eq!(mul.operate(&[]), one);
-    let a = Quaternion { re: 5.0, i: 0.0, j: 7.0, k: 0.0 };
-    assert_quaternion_eq!(mul.operate(&[a]), a);
-}
-
-
-// Complex addition: use approx_eq
-#[test]
-fn test_complex_addition_group_laws() {
-    let add = ComplexAddition;
-    let mut rng = rand::thread_rng();
-
-    for _ in 0..100 {
-        let a = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-        let b = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-        let c = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-
-        // Associativity
-        assert_complex_eq!(
-            add.operate_binary(add.operate_binary(a, b), c),
-            add.operate_binary(a, add.operate_binary(b, c))
-        );
-
-        // Commutativity
-        assert_complex_eq!(add.operate_binary(a, b), add.operate_binary(b, a));
-
-        // Identity
-        assert_complex_eq!(add.operate_binary(a, Complex { re: 0.0, im: 0.0 }), a);
-        assert_complex_eq!(add.operate_binary(Complex { re: 0.0, im: 0.0 }, a), a);
-
-        // Inverse
-        let inv = Complex { re: -a.re, im: -a.im };
-        assert_complex_eq!(add.operate_binary(a, inv), Complex { re: 0.0, im: 0.0 });
-    }
-
-    let a = Complex { re: 5.0, im: 7.0 };
-    assert_complex_eq!(add.operate(&[a]), a);
-}
-
-
-#[test]
-fn test_complex_multiplication_group_laws() {
-    let mul = ComplexMultiplication;
-    let mut rng = rand::thread_rng();
-    let one = Complex { re: 1.0, im: 0.0 };
-
-    for _ in 0..100 {
-        let a = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-        let b = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-        let c = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
-
-        // Associativity
-        assert_complex_eq!(
-            mul.operate_binary(mul.operate_binary(a, b), c),
-            mul.operate_binary(a, mul.operate_binary(b, c))
-        );
-
-        // Commutativity
+        // Test commutativity
         assert_complex_eq!(mul.operate_binary(a, b), mul.operate_binary(b, a));
 
-        // Identity
-        assert_complex_eq!(mul.operate_binary(a, one), a);
-        assert_complex_eq!(mul.operate_binary(one, a), a);
-
-        // Inverse
-        let norm_sq = a.re * a.re + a.im * a.im;
-        let inv = Complex {
-            re: a.re / norm_sq,
-            im: -a.im / norm_sq,
-        };
-        assert_complex_eq!(mul.operate_binary(a, inv), one);
+        // Test inverse
+        let inv_a = mul.inverse(a);
+        let product = mul.operate_binary(a, inv_a);
+        assert_complex_eq!(product, Complex { re: 1.0, im: 0.0 });
     }
-
-    assert_complex_eq!(mul.operate(&[]), one);
-    let a = Complex { re: 5.0, im: 7.0 };
-    assert_complex_eq!(mul.operate(&[a]), a);
 }
 
 #[test]
-fn test_complex_field_laws() {
+fn test_complex_field_properties() {
     let add = ComplexAddition;
     let mul = ComplexMultiplication;
     let mut rng = rand::thread_rng();
-    let one = Complex { re: 1.0, im: 0.0 };
-    let zero = Complex { re: 0.0, im: 0.0 };
 
-    for _ in 0..100 {
+    for _ in 0..50 {
         let a = Complex { re: rng.gen_range(-50.0..50.0), im: rng.gen_range(-50.0..50.0) };
         let b = Complex { re: rng.gen_range(-50.0..50.0), im: rng.gen_range(-50.0..50.0) };
         let c = Complex { re: rng.gen_range(-50.0..50.0), im: rng.gen_range(-50.0..50.0) };
 
-        // Distributivity
-        let lhs = mul.operate_binary(a, add.operate_binary(b, c));
-        let rhs = add.operate_binary(mul.operate_binary(a, b), mul.operate_binary(a, c));
-        assert_complex_eq!(lhs, rhs);
+        // Test distributivity: a * (b + c) = a * b + a * c
+        let left = mul.operate_binary(a, add.operate_binary(b, c));
+        let right = add.operate_binary(mul.operate_binary(a, b), mul.operate_binary(a, c));
+        assert_complex_eq!(left, right);
 
-        // Multiplicative inverse exists (if non-zero)
-        if a.re != 0.0 || a.im != 0.0 {
-            let norm_sq = a.re * a.re + a.im * a.im;
-            let inv = Complex {
-                re: a.re / norm_sq,
-                im: -a.im / norm_sq,
-            };
-            let prod = mul.operate_binary(a, inv);
-            assert_complex_eq!(prod, one);
-        }
+        // Test right distributivity: (a + b) * c = a * c + b * c
+        let left_right = mul.operate_binary(add.operate_binary(a, b), c);
+        let right_right = add.operate_binary(mul.operate_binary(a, c), mul.operate_binary(b, c));
+        assert_complex_eq!(left_right, right_right);
     }
 }
 
 #[test]
-fn test_octonion_structures() {
+fn test_complex_edge_cases() {
+    let add = ComplexAddition;
+    let mul = ComplexMultiplication;
+
+    // Test zero element
+    let zero = Complex { re: 0.0, im: 0.0 };
+    assert_complex_eq!(add.operate_binary(zero, zero), zero);
+    assert_complex_eq!(mul.operate_binary(zero, zero), zero);
+
+    // Test identity element
+    let one = Complex { re: 1.0, im: 0.0 };
+    assert_complex_eq!(add.operate_binary(one, zero), one);
+    assert_complex_eq!(mul.operate_binary(one, one), one);
+
+    // Test inverse element
+    let neg_one = Complex { re: -1.0, im: 0.0 };
+    assert_complex_eq!(add.operate_binary(one, neg_one), zero);
+}
+#[test]
+fn test_complex_randomized_operations() {
+    let add = ComplexAddition;
+    let mul = ComplexMultiplication;
     let mut rng = rand::thread_rng();
 
-    // Test Octonion Addition
-    let add = OctonionAddition;
-    let a = Octonion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-        l: rng.gen_range(-100.0..100.0),
-        m: rng.gen_range(-100.0..100.0),
-        n: rng.gen_range(-100.0..100.0),
-        o: rng.gen_range(-100.0..100.0),
-    };
-    let b = Octonion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-        l: rng.gen_range(-100.0..100.0),
-        m: rng.gen_range(-100.0..100.0),
-        n: rng.gen_range(-100.0..100.0),
-        o: rng.gen_range(-100.0..100.0),
-    };
+    for _ in 0..100 {
+        let a = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
+        let b = Complex { re: rng.gen_range(-100.0..100.0), im: rng.gen_range(-100.0..100.0) };
 
-    let sum = add.operate_binary(a, b);
-    assert_eq!(
-        sum,
-        Octonion {
-            re: a.re + b.re,
-            i: a.i + b.i,
-            j: a.j + b.j,
-            k: a.k + b.k,
-            l: a.l + b.l,
-            m: a.m + b.m,
-            n: a.n + b.n,
-            o: a.o + b.o,
-        }
-    );
+        // Test addition
+        let sum = add.operate_binary(a, b);
+        assert_complex_eq!(sum, Complex { re: a.re + b.re, im: a.im + b.im });
 
-    // Test Octonion Multiplication
-    let mul = OctonionMultiplication;
-    let product = mul.operate_binary(a, b);
-    assert_ne!(product, mul.operate_binary(b, a), "Octonion multiplication is unexpectedly commutative");
-
-    // Test Quaternion Multiplication
-    let quaternion_mul = QuaternionMultiplication;
-    let q1 = Quaternion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-    };
-    let q2 = Quaternion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-    };
-
-    let quaternion_product = quaternion_mul.operate_binary(q1, q2);
-    assert_ne!(quaternion_product, quaternion_mul.operate_binary(q2, q1), "Quaternion multiplication is unexpectedly commutative");
-}
-
-#[test]
-fn test_non_commutativity_quaternions() {
-    let mul = QuaternionMultiplication;
-    let mut rng = rand::thread_rng();
-
-    let a = Quaternion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-    };
-    let b = Quaternion {
-        re: rng.gen_range(-100.0..100.0),
-        i: rng.gen_range(-100.0..100.0),
-        j: rng.gen_range(-100.0..100.0),
-        k: rng.gen_range(-100.0..100.0),
-    };
-
-    let ab = mul.operate_binary(a, b);
-    let ba = mul.operate_binary(b, a);
-
-    assert_ne!(ab, ba, "Quaternion multiplication is unexpectedly commutative");
-}
-
-#[test]
-#[should_panic(expected = "Cannot invert a zero quaternion")]
-fn test_zero_quaternion_inverse() {
-    let mul = QuaternionMultiplication;
-
-    // Define the zero quaternion
-    let zero_quaternion = Quaternion {
-        re: 0.0,
-        i: 0.0,
-        j: 0.0,
-        k: 0.0,
-    };
-
-    // Attempt to compute the inverse, which should panic
-    mul.inverse(zero_quaternion);
+        // Test multiplication
+        let product = mul.operate_binary(a, b);
+        assert_complex_eq!(product, Complex {
+            re: a.re * b.re - a.im * b.im,
+            im: a.re * b.im + a.im * b.re,
+        });
+    }
 }

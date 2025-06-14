@@ -3,7 +3,7 @@ mod tests {
     include!("tests/linear_algebra_tests.rs");
     include!("tests/number_system_tests.rs");
     include!("tests/validating_structures_tests.rs");
-    include!("tests/new_structures_tests.rs");
+    include!("tests/p2p_tests.rs");
 }
 
 mod libs {
