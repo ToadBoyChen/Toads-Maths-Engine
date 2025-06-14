@@ -6,4 +6,5 @@ rust-version = "1.87.0"
 keywords = []
 
 [dependencies]
+num-traits = "0.2.19"
 rand = "0.8"

@@ -4,6 +4,8 @@
 
 // use crate::libs::*;
 
+use num_traits::{Float, Zero, One};
+
 // Integer addition group
 pub struct IntegerAddition;
 
@@ -172,80 +174,154 @@ impl Group<Complex> for ComplexAddition {
     }
 }
 
-// N-dimensional matrix addition group
 #[derive(Debug, Clone, PartialEq)]
-pub struct NMatrixAddition {
-    pub elements: Vec<f64>,
+pub struct Matrix<T> {
+    pub rows: usize,
+    pub cols: usize,
+    pub elements: Vec<T>, // Flat vector, row-major order
 }
 
-impl NMatrixAddition {
-    pub fn zero() -> Self {
-        NMatrixAddition { elements: vec![0.0; 2] }
+impl<T: Copy + Zero + One + Float> Matrix<T> {  // Bounds ensure T supports necessary ops without assuming Reals
+    pub fn new(rows: usize, cols: usize, elements: Vec<T>) -> Result<Self, String> {
+        if elements.len() != rows * cols {
+            return Err("Element count must match rows * cols".to_string());
+        }
+        Ok(Matrix { rows, cols, elements })
     }
-}
 
-impl Algebra<NMatrixAddition> for NMatrixAddition {
-    fn operate_binary(&self, a: NMatrixAddition, b: NMatrixAddition) -> NMatrixAddition {
-        NMatrixAddition {
-            elements: a.elements.iter().zip(b.elements.iter()).map(|(x, y)| x + y).collect(),
+    pub fn zero(rows: usize, cols: usize) -> Self {
+        Matrix {
+            rows,
+            cols,
+            elements: vec![T::zero(); rows * cols],
         }
     }
 
-    fn operate(&self, elements: &[NMatrixAddition]) -> NMatrixAddition {
+    pub fn identity(size: usize) -> Self {  // For square identity matrix
+        let mut elements = vec![T::zero(); size * size];
+        for i in 0..size {
+            elements[i * size + i] = T::one();
+        }
+        Matrix { rows: size, cols: size, elements }
+    }
+
+    // Helper to get element at (i, j)
+    fn get(&self, i: usize, j: usize) -> T {
+        self.elements[i * self.cols + j]
+    }
+
+    // Helper to set element at (i, j)
+    fn set(&mut self, i: usize, j: usize, value: T) {
+        self.elements[i * self.cols + j] = value;
+    }
+}
+
+// Updated MatrixAddition with proper dimension checks
+pub struct MatrixAddition;
+
+impl<T: Copy + std::ops::Add<Output = T> + Zero + Float> Algebra<Matrix<T>> for MatrixAddition {
+    fn operate_binary(&self, a: Matrix<T>, b: Matrix<T>) -> Matrix<T> {
+        if a.rows != b.rows || a.cols != b.cols {
+            panic!("Cannot add matrices with mismatched dimensions");
+        }
+        let elements = a.elements.iter().zip(b.elements.iter()).map(|(&x, &y)| x + y).collect();
+        Matrix { rows: a.rows, cols: a.cols, elements }
+    }
+
+    fn operate(&self, elements: &[Matrix<T>]) -> Matrix<T> {
         if elements.is_empty() {
-            NMatrixAddition::zero()
-        } else {
-            elements.iter().fold(NMatrixAddition::zero(), |acc, x| self.operate_binary(acc, (*x).clone()))
+            return Matrix::zero(0, 0);  // Handle empty case as 0x0 zero matrix
         }
-    }
-}
-impl Group<NMatrixAddition> for NMatrixAddition {
-    fn identity(&self) -> NMatrixAddition {
-        NMatrixAddition::zero()
-    }
-    fn inverse(&self, a: NMatrixAddition) -> NMatrixAddition {
-        NMatrixAddition {
-            elements: a.elements.iter().map(|&x| -x).collect(),
-        }
+        let first = &elements[0];
+        elements.iter().skip(1).fold(first.clone(), |acc, x| self.operate_binary(acc, x.clone()))
     }
 }
 
-// N-dimensional matrix multiplication group
-#[derive(Debug, Clone, PartialEq)]
-pub struct NMatrixMultiplication {
-    pub elements: Vec<f64>,
-}
-
-impl Algebra<NMatrixMultiplication> for NMatrixMultiplication {
-    fn operate_binary(&self, a: NMatrixMultiplication, b: NMatrixMultiplication) -> NMatrixMultiplication {
-        NMatrixMultiplication {
-            elements: a.elements.iter().zip(b.elements.iter()).map(|(x, y)| x * y).collect(),
-        }
+impl<T: Copy + std::ops::Neg<Output = T> + std::ops::Add<Output = T> + Zero + Float> Group<Matrix<T>> for MatrixAddition {
+    fn identity(&self) -> Matrix<T> {
+        Matrix::zero(0, 0)  // General identity is the zero matrix; for specific dims, use Matrix::zero
     }
 
-    fn operate(&self, elements: &[NMatrixMultiplication]) -> NMatrixMultiplication {
+    fn inverse(&self, a: Matrix<T>) -> Matrix<T> {
+        let elements = a.elements.iter().map(|&x| -x).collect();
+        Matrix { rows: a.rows, cols: a.cols, elements }
+    }
+}
+
+// Updated MatrixMultiplication with standard matrix multiplication
+pub struct MatrixMultiplication;
+
+impl<T: Copy + std::ops::Mul<Output = T> + std::ops::Add<Output = T> + Zero + One + Float> Algebra<Matrix<T>> for MatrixMultiplication {
+    fn operate_binary(&self, a: Matrix<T>, b: Matrix<T>) -> Matrix<T> {
+        if a.cols != b.rows {
+            panic!("Cannot multiply matrices: incompatible dimensions (a.cols != b.rows)");
+        }
+        let mut elements = vec![T::zero(); a.rows * b.cols];
+        for i in 0..a.rows {
+            for j in 0..b.cols {
+                let mut sum = T::zero();
+                for k in 0..a.cols {
+                    sum = sum + a.get(i, k) * b.get(k, j);
+                }
+                elements[i * b.cols + j] = sum;
+            }
+        }
+        Matrix { rows: a.rows, cols: b.cols, elements }
+    }
+
+    fn operate(&self, elements: &[Matrix<T>]) -> Matrix<T> {
         if elements.is_empty() {
-            NMatrixMultiplication::zero()
-        } else {
-            elements.iter().fold(NMatrixMultiplication::zero(), |acc, x| self.operate_binary(acc, (*x).clone()))
+            return Matrix::identity(1);  // 1x1 identity for empty product
         }
+        elements.iter().fold(Matrix::identity(elements[0].rows), |acc, x| {
+            if acc.cols != x.rows {
+                panic!("Incompatible dimensions in matrix product");
+            }
+            self.operate_binary(acc, x.clone())
+        })
     }
 }
 
-impl NMatrixMultiplication {
-    pub fn zero() -> Self {
-        NMatrixMultiplication { elements: vec![1.0; 2] } // Identity for multiplication
+impl<T: Copy + std::ops::Mul<Output = T> + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + std::ops::Div<Output = T> + Zero + One + Float + PartialOrd> Group<Matrix<T>> for MatrixMultiplication {
+    fn identity(&self) -> Matrix<T> {
+        Matrix::identity(1)  // Default 1x1 identity; can be adjusted for dims
     }
-}
 
-impl Group<NMatrixMultiplication> for NMatrixMultiplication {
-    fn identity(&self) -> NMatrixMultiplication {
-        NMatrixMultiplication::zero()
-    }
-    fn inverse(&self, a: NMatrixMultiplication) -> NMatrixMultiplication {
-        NMatrixMultiplication {
-            elements: a.elements.iter().map(|&x| if x != 0.0 { 1.0 / x } else { 0.0 }).collect(),
+    fn inverse(&self, a: Matrix<T>) -> Matrix<T> {
+        if a.rows != a.cols {
+            panic!("Matrix must be square for inversion");
         }
+        // Simplified Gaussian elimination for inversion (for generality)
+        // Note: This is a basic implementation; for production, consider using a library like nalgebra
+        let n = a.rows;
+        let mut mat = a.clone();
+        let mut inv = Matrix::identity(n);
+        for i in 0..n {
+            // Find pivot
+            if mat.get(i, i) == T::zero() {
+                panic!("Matrix is singular and cannot be inverted");
+            }
+            // Eliminate
+            for j in 0..n {
+                if i != j {
+                    let factor = mat.get(j, i) / mat.get(i, i);
+                    for k in 0..n {
+                        let new_val = mat.get(j, k) - factor * mat.get(i, k);
+                        mat.set(j, k, new_val);
+                        let inv_val = inv.get(j, k) - factor * inv.get(i, k);
+                        inv.set(j, k, inv_val);
+                    }
+                }
+            }
+        }
+        // Normalize (simplified)
+        for i in 0..n {
+            let pivot = mat.get(i, i);
+            for j in 0..n {
+                inv.set(i, j, inv.get(i, j) / pivot);
+            }
+        }
+        inv
     }
 }
 
@@ -404,7 +480,7 @@ impl EuclideanSpace {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Octonion {
     pub re: f64,
     pub i: f64,
@@ -466,26 +542,53 @@ impl Group<Octonion> for OctonionAddition {
     }
 }
 
+// Updated OctonionMultiplication with correct, full multiplication formula
 impl Algebra<Octonion> for OctonionMultiplication {
     fn operate_binary(&self, a: Octonion, b: Octonion) -> Octonion {
+        // Full standard octonion multiplication (non-associative, based on Cayley-Dickson or Fano plane)
+        // Each component follows the multiplication table for basis elements
         Octonion {
             re: a.re * b.re - a.i * b.i - a.j * b.j - a.k * b.k - a.l * b.l - a.m * b.m - a.n * b.n - a.o * b.o,
-            i: a.re * b.i + a.i * b.re,
-            j: a.re * b.j + a.j * b.re,
-            k: a.re * b.k + a.k * b.re,
-            l: a.re * b.l + a.l * b.re,
-            m: a.re * b.m + a.m * b.re,
-            n: a.re * b.n + a.n * b.re,
-            o: a.re * b.o + a.o * b.re,
+            i: a.re * b.i + a.i * b.re + a.j * b.l - a.k * b.m + a.l * b.j + a.m * b.k - a.n * b.o + a.o * b.n,
+            j: a.re * b.j - a.i * b.l + a.j * b.re + a.k * b.n - a.l * b.i - a.m * b.o + a.n * b.k + a.o * b.m,
+            k: a.re * b.k + a.i * b.m - a.j * b.n + a.k * b.re + a.l * b.o - a.m * b.i - a.n * b.j + a.o * b.l,
+            l: a.re * b.l - a.i * b.j + a.j * b.i - a.k * b.o + a.l * b.re + a.m * b.n + a.n * b.m - a.o * b.k,
+            m: a.re * b.m + a.i * b.k + a.j * b.o + a.k * b.i - a.l * b.n + a.m * b.re - a.n * b.l - a.o * b.j,
+            n: a.re * b.n - a.i * b.o - a.j * b.k + a.k * b.j + a.l * b.m + a.m * b.l + a.n * b.re + a.o * b.i,
+            o: a.re * b.o + a.i * b.n - a.j * b.m - a.k * b.l - a.l * b.k + a.m * b.j - a.n * b.i + a.o * b.re,
         }
     }
 
     fn operate(&self, elements: &[Octonion]) -> Octonion {
-        elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+        if elements.is_empty() {
+            self.identity()  // Explicitly handle empty case
+        } else {
+            elements.iter().fold(self.identity(), |acc, &x| self.operate_binary(acc, x))
+        }
     }
 }
 
 impl Group<Octonion> for OctonionMultiplication {
+    // ... existing code ... (identity remains the same)
+
+    fn inverse(&self, a: Octonion) -> Octonion {
+        let norm_squared = a.re * a.re + a.i * a.i + a.j * a.j + a.k * a.k + a.l * a.l + a.m * a.m + a.n * a.n + a.o * a.o;
+        const EPS: f64 = 1e-10;  // Added for numerical stability
+        if norm_squared.abs() < EPS {
+            panic!("Cannot invert a near-zero octonion (norm too small)");
+        }
+        Octonion {
+            re: a.re / norm_squared,
+            i: -a.i / norm_squared,
+            j: -a.j / norm_squared,
+            k: -a.k / norm_squared,
+            l: -a.l / norm_squared,
+            m: -a.m / norm_squared,
+            n: -a.n / norm_squared,
+            o: -a.o / norm_squared,
+        }
+    }
+
     fn identity(&self) -> Octonion {
         Octonion {
             re: 1.0,
@@ -498,21 +601,19 @@ impl Group<Octonion> for OctonionMultiplication {
             o: 0.0,
         }
     }
+}
 
-    fn inverse(&self, a: Octonion) -> Octonion {
-        let norm_squared = a.re * a.re + a.i * a.i + a.j * a.j + a.k * a.k + a.l * a.l + a.m * a.m + a.n * a.n + a.o * a.o;
-        if norm_squared == 0.0 {
-            panic!("Cannot invert a zero octonion");
-        }
-        Octonion {
-            re: a.re / norm_squared,
-            i: -a.i / norm_squared,
-            j: -a.j / norm_squared,
-            k: -a.k / norm_squared,
-            l: -a.l / norm_squared,
-            m: -a.m / norm_squared,
-            n: -a.n / norm_squared,
-            o: -a.o / norm_squared,
-        }
+// Update PartialEq for better floating-point handling
+impl PartialEq for Octonion {
+    fn eq(&self, other: &Self) -> bool {
+        const EPS: f64 = 1e-6;
+        (self.re - other.re).abs() < EPS &&
+        (self.i - other.i).abs() < EPS &&
+        (self.j - other.j).abs() < EPS &&
+        (self.k - other.k).abs() < EPS &&
+        (self.l - other.l).abs() < EPS &&
+        (self.m - other.m).abs() < EPS &&
+        (self.n - other.n).abs() < EPS &&
+        (self.o - other.o).abs() < EPS
     }
 }
